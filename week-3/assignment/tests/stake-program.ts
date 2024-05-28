@@ -1,10 +1,10 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import { BN, Program } from "@coral-xyz/anchor";
 import { StakeProgram } from "../target/types/stake_program";
 import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
   createInitializeMint2Instruction,
-  createMint,
   createMintToInstruction,
   getAccount,
   getAssociatedTokenAddressSync,
@@ -12,6 +12,7 @@ import {
   MINT_SIZE,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
+import { expect } from "chai";
 
 describe("stake-program", () => {
   // Configure the client to use the local cluster.
@@ -107,7 +108,60 @@ describe("stake-program", () => {
       })
       .rpc();
 
-    const rewardVaultAccount = await getAccount(provider.connection, rewardVault)
-    console.log({ rewardVaultAccount })
+    const rewardVaultAccount = await getAccount(
+      provider.connection,
+      rewardVault
+    );
+    console.log({ rewardVaultAccount });
+  });
+
+  it("stake", async () => {
+    const stakeInfo = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("stake_info"), staker.publicKey.toBytes()],
+      program.programId
+    )[0];
+
+    const vaultTokenAccount = getAssociatedTokenAddressSync(
+      usdcMintKp.publicKey,
+      stakeInfo,
+      true
+    );
+
+    const stakeAmount = new BN(100 * 10 ** 6);
+
+    const tx = await program.methods
+      .stake(stakeAmount)
+      .accounts({
+        staker: staker.publicKey,
+        mint: usdcMintKp.publicKey,
+        stakerTokenAccount: stakerTokenAccount,
+        stakeInfo: stakeInfo,
+        vaultTokenAccount: vaultTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([staker])
+      .rpc();
+
+    console.log("Your transaction signature", tx);
+
+    const stakerAccount = await getAccount(
+      provider.connection,
+      stakerTokenAccount
+    );
+
+    const vaultAccount = await getAccount(
+      provider.connection,
+      vaultTokenAccount
+    );
+
+    const stakeInfoAccount = await program.account.stakeInfo.fetch(stakeInfo);
+
+    console.log({ stakerAccount });
+
+    console.log({ vaultAccount });
+
+    console.log({ stakeInfoAccount });
   });
 });
