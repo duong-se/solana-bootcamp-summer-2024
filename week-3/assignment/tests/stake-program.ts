@@ -88,7 +88,7 @@ describe("stake-program", () => {
       );
 
       const ts = await provider.sendAndConfirm(tx, [usdcMintKp, staker]);
-      console.log("Your transaction signature", tx);
+      // console.log("Your transaction signature", tx);
     }
   });
 
@@ -112,7 +112,7 @@ describe("stake-program", () => {
       provider.connection,
       rewardVault
     );
-    console.log({ rewardVaultAccount });
+    // console.log({ rewardVaultAccount });
   });
 
   it("stake", async () => {
@@ -144,7 +144,7 @@ describe("stake-program", () => {
       .signers([staker])
       .rpc();
 
-    console.log("Your transaction signature", tx);
+    // console.log("Your transaction signature", tx);
 
     const stakerAccount = await getAccount(
       provider.connection,
@@ -158,11 +158,11 @@ describe("stake-program", () => {
 
     const stakeInfoAccount = await program.account.stakeInfo.fetch(stakeInfo);
 
-    console.log({ stakerAccount });
+    // console.log({ stakerAccount });
 
-    console.log({ vaultAccount });
+    // console.log({ vaultAccount });
 
-    console.log({ stakeInfoAccount });
+    // console.log({ stakeInfoAccount });
   });
 
 
@@ -193,9 +193,10 @@ describe("stake-program", () => {
     )
     mintTx.add(mintToRewardVaultIx)
     await provider.sendAndConfirm(mintTx)
+    const unStakeAmount = new BN(100 * 10 ** 6);
 
     const tx = await program.methods
-      .unstake()
+      .unstake(unStakeAmount)
       .accounts({
         staker: staker.publicKey,
         mint: usdcMintKp.publicKey,
@@ -210,7 +211,7 @@ describe("stake-program", () => {
       .signers([staker])
       .rpc();
 
-    console.log("Your transaction signature", tx);
+    // console.log("Your transaction signature", tx);
 
     const stakerAccount = await getAccount(
       provider.connection,
@@ -224,10 +225,10 @@ describe("stake-program", () => {
 
     const stakeInfoAccount = await program.account.stakeInfo.fetch(stakeInfo);
 
-    console.log({ stakerAccount: stakerAccount.amount });
+    // console.log({ stakerAccount: stakerAccount.amount });
 
-    console.log({ vaultAccount: vaultAccount.amount });
+    console.log({ vaultAccount: vaultAccount });
 
-    console.log({ stakeInfoAccount: stakeInfoAccount.amount });
+    // console.log({ stakeInfoAccount: stakeInfoAccount.amount });
   });
 });

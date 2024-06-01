@@ -13,4 +13,13 @@ pub enum AppError {
 
   #[msg("Over your stake balance")]
   OverStakeBalance,
+
+  #[msg("Non zero balance")]
+  NonZeroBalance,
+
+  #[msg("Not owner")]
+  NotOwner,
+
+  #[msg("Over vault balance")]
+  OverBalance,
 }

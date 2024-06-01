@@ -1,8 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{transfer, Mint, Token, TokenAccount},
+    token::{transfer, CloseAccount, Mint, Token, TokenAccount, Transfer},
 };
+
+use anchor_lang::__private::CLOSED_ACCOUNT_DISCRIMINATOR;
+use std::io::{Cursor, Write};
+use std::ops::DerefMut;
+
 use constants::{REWARD_VAULT_SEED, STAKE_INFO_SEED};
 use errors::AppError;
 use state::StakeInfo;
@@ -15,8 +20,6 @@ declare_id!("Drzahf6sg5fttp1HHRNrCnrGzYTNnpjAzsF5vU5RXgxJ");
 
 #[program]
 pub mod stake_program {
-    use anchor_spl::token::Transfer;
-
     use super::*;
 
     pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
@@ -56,7 +59,7 @@ pub mod stake_program {
         Ok(())
     }
 
-    pub fn unstake(ctx: Context<UnStake>, amount: u64) -> Result<()> {
+    pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
         const DENUMERATOR: u64 = 100_000;
         const NUMERATOR: u64 = 1_000; // aka 1%
         let stake_info = &ctx.accounts.stake_info;
@@ -128,17 +131,39 @@ pub mod stake_program {
 
         if stake_info.amount == 0 {
             stake_info.is_staked = false;
-
             // close staker vault token account
+            msg!(
+                "ctx.accounts.vault_token_account.amount: {}",
+                ctx.accounts.vault_token_account.amount
+            );
+            // if ctx.accounts.vault_token_account.amount > 0 {
+            //     return Err(AppError::NonZeroBalance.into());
+            // }
             anchor_spl::token::close_account(CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                anchor_spl::token::CloseAccount {
+                CloseAccount {
                     account: ctx.accounts.vault_token_account.to_account_info(),
-                    destination: ctx.accounts.staker.to_account_info(),
+                    destination: ctx.accounts.staker_token_account.to_account_info(),
                     authority: ctx.accounts.stake_info.to_account_info(),
                 },
                 stake_info_signer_seeds,
             ))?;
+            // close staker staker_info account
+            // let dest_starting_lamports = ctx.accounts.staker.lamports();
+            // let need_to_close_account = ctx.accounts.stake_info.to_account_info();
+            // **ctx.accounts.staker.lamports.borrow_mut() = dest_starting_lamports
+            //     .checked_add(need_to_close_account.lamports())
+            //     .unwrap();
+            // **need_to_close_account.lamports.borrow_mut() = 0;
+
+            // let mut data = need_to_close_account.try_borrow_mut_data()?;
+            // for byte in data.deref_mut().iter_mut() {
+            //     *byte = 0;
+            // }
+
+            // let dst: &mut [u8] = &mut data;
+            // let mut cursor = Cursor::new(dst);
+            // cursor.write_all(&CLOSED_ACCOUNT_DISCRIMINATOR).unwrap();
         }
         Ok(())
     }
@@ -152,7 +177,7 @@ pub struct Initialize<'info> {
     pub mint: Account<'info, Mint>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = admin,
         seeds = [REWARD_VAULT_SEED, mint.key().as_ref()],
         bump,
@@ -180,7 +205,7 @@ pub struct Stake<'info> {
     pub staker_token_account: Account<'info, TokenAccount>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = staker,
         seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
@@ -202,7 +227,7 @@ pub struct Stake<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UnStake<'info> {
+pub struct Unstake<'info> {
     #[account(mut)]
     pub staker: Signer<'info>,
 
@@ -219,13 +244,15 @@ pub struct UnStake<'info> {
         mut,
         seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
+        has_one = mint,
+        constraint = stake_info.staker == staker.key() @ AppError::NotOwner
     )]
     pub stake_info: Account<'info, StakeInfo>,
 
     #[account(
         mut,
-        associated_token::mint = mint,
-        associated_token::authority = stake_info,
+        token::mint = mint,
+        token::authority = stake_info,
     )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
