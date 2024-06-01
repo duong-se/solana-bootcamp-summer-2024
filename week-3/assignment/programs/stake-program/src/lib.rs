@@ -56,12 +56,18 @@ pub mod stake_program {
         Ok(())
     }
 
-    pub fn unstake(ctx: Context<UnStake>) -> Result<()> {
+    pub fn unstake(ctx: Context<UnStake>, amount: u64) -> Result<()> {
+        const DENUMERATOR: u64 = 100_000;
+        const NUMERATOR: u64 = 1_000; // aka 1%
         let stake_info = &ctx.accounts.stake_info;
         let stake_key = ctx.accounts.staker.key();
         let mint_key = ctx.accounts.mint.key();
         if !stake_info.is_staked {
             return Err(AppError::NotStaked.into());
+        }
+
+        if amount > stake_info.amount {
+            return Err(AppError::OverStakeBalance.into());
         }
 
         let clock = Clock::get()?;
@@ -86,14 +92,14 @@ pub mod stake_program {
             stake_info.amount,
         )?;
 
-        // transfer reward from reward vault to staker token amount
-        let reward = slot_passed
-            .checked_mul(
-                // 10u64.pow(ctx.accounts.mint.decimals as u32) *
-                stake_info.amount * 1 / 100,
-            )
+        let reward_by_amount = stake_info
+            .amount
+            .checked_mul(NUMERATOR)
+            .and_then(|res| res.checked_div(DENUMERATOR))
             .unwrap();
 
+        // transfer reward from reward vault to staker token amount
+        let reward = slot_passed.checked_mul(reward_by_amount).unwrap(); // Handling potential overflow
         msg!("reward: {}", reward);
 
         let reward_vault_signer_seeds: &[&[&[u8]]] = &[&[
@@ -101,23 +107,39 @@ pub mod stake_program {
             mint_key.as_ref(),
             &[ctx.bumps.reward_vault],
         ]];
-        transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.reward_vault.to_account_info(),
-                    to: ctx.accounts.staker_token_account.to_account_info(),
-                    authority: ctx.accounts.reward_vault.to_account_info(),
-                },
-                reward_vault_signer_seeds,
-            ),
-            reward,
-        )?;
-        // Update stake info
         let stake_info = &mut ctx.accounts.stake_info;
-        stake_info.is_staked = false;
-        stake_info.stake_at = clock.slot;
-        stake_info.amount = 0;
+        if reward > 0 {
+            transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Transfer {
+                        from: ctx.accounts.reward_vault.to_account_info(),
+                        to: ctx.accounts.staker_token_account.to_account_info(),
+                        authority: ctx.accounts.reward_vault.to_account_info(),
+                    },
+                    reward_vault_signer_seeds,
+                ),
+                reward,
+            )?;
+            // Update stake info
+            stake_info.amount -= amount;
+            stake_info.stake_at = clock.slot;
+        }
+
+        if stake_info.amount == 0 {
+            stake_info.is_staked = false;
+
+            // close staker vault token account
+            anchor_spl::token::close_account(CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::CloseAccount {
+                    account: ctx.accounts.vault_token_account.to_account_info(),
+                    destination: ctx.accounts.staker.to_account_info(),
+                    authority: ctx.accounts.stake_info.to_account_info(),
+                },
+                stake_info_signer_seeds,
+            ))?;
+        }
         Ok(())
     }
 }

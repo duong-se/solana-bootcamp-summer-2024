@@ -10,4 +10,7 @@ pub enum AppError {
 
   #[msg("No Token to stake")]
   NoToken,
+
+  #[msg("Over your stake balance")]
+  OverStakeBalance,
 }
