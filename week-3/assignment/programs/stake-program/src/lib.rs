@@ -59,6 +59,7 @@ pub mod stake_program {
     pub fn unstake(ctx: Context<UnStake>) -> Result<()> {
         let stake_info = &ctx.accounts.stake_info;
         let stake_key = ctx.accounts.staker.key();
+        let mint_key = ctx.accounts.mint.key();
         if !stake_info.is_staked {
             return Err(AppError::NotStaked.into());
         }
@@ -69,6 +70,7 @@ pub mod stake_program {
         let stake_info_signer_seeds: &[&[&[u8]]] = &[&[
             STAKE_INFO_SEED,
             stake_key.as_ref(),
+            mint_key.as_ref(),
             &[ctx.bumps.stake_info],
         ]];
         transfer(
@@ -86,13 +88,17 @@ pub mod stake_program {
 
         // transfer reward from reward vault to staker token amount
         let reward = slot_passed
-        .checked_mul(10u64.pow(ctx.accounts.mint.decimals as u32))
-        .unwrap();
+            .checked_mul(
+                // 10u64.pow(ctx.accounts.mint.decimals as u32) *
+                stake_info.amount * 1 / 100,
+            )
+            .unwrap();
 
         msg!("reward: {}", reward);
 
         let reward_vault_signer_seeds: &[&[&[u8]]] = &[&[
             REWARD_VAULT_SEED,
+            mint_key.as_ref(),
             &[ctx.bumps.reward_vault],
         ]];
         transfer(
@@ -126,7 +132,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        seeds = [REWARD_VAULT_SEED],
+        seeds = [REWARD_VAULT_SEED, mint.key().as_ref()],
         bump,
         token::mint = mint,
         token::authority = reward_vault,
@@ -154,7 +160,7 @@ pub struct Stake<'info> {
     #[account(
         init,
         payer = staker,
-        seeds = [STAKE_INFO_SEED, staker.key().as_ref()],
+        seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
         space = 8 + StakeInfo::INIT_SPACE,
     )]
@@ -173,8 +179,6 @@ pub struct Stake<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
-
-
 #[derive(Accounts)]
 pub struct UnStake<'info> {
     #[account(mut)]
@@ -191,7 +195,7 @@ pub struct UnStake<'info> {
 
     #[account(
         mut,
-        seeds = [STAKE_INFO_SEED, staker.key().as_ref()],
+        seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
     )]
     pub stake_info: Account<'info, StakeInfo>,
@@ -205,7 +209,7 @@ pub struct UnStake<'info> {
 
     #[account(
         mut,
-        seeds = [REWARD_VAULT_SEED],
+        seeds = [REWARD_VAULT_SEED, mint.key().as_ref()],
         bump,
         token::mint = mint,
         token::authority = reward_vault,

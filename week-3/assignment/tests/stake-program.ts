@@ -94,7 +94,7 @@ describe("stake-program", () => {
 
   it("Is initialized!", async () => {
     const rewardVault = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("reward")],
+      [Buffer.from("reward"), usdcMintKp.publicKey.toBytes()],
       program.programId
     )[0];
     const tx = await program.methods
@@ -117,7 +117,7 @@ describe("stake-program", () => {
 
   it("stake", async () => {
     const stakeInfo = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("stake_info"), staker.publicKey.toBytes()],
+      [Buffer.from("stake_info"), staker.publicKey.toBytes(), usdcMintKp.publicKey.toBytes()],
       program.programId
     )[0];
 
@@ -168,7 +168,7 @@ describe("stake-program", () => {
 
   it("unstake", async () => {
     const stakeInfo = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("stake_info"), staker.publicKey.toBytes()],
+      [Buffer.from("stake_info"), staker.publicKey.toBytes(), usdcMintKp.publicKey.toBytes()],
       program.programId
     )[0];
 
@@ -179,7 +179,7 @@ describe("stake-program", () => {
     );
 
     const rewardVault = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("reward")],
+      [Buffer.from("reward"), usdcMintKp.publicKey.toBytes()],
       program.programId
     )[0];
 
