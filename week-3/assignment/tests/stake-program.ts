@@ -164,4 +164,70 @@ describe("stake-program", () => {
 
     console.log({ stakeInfoAccount });
   });
+
+
+  it("unstake", async () => {
+    const stakeInfo = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("stake_info"), staker.publicKey.toBytes()],
+      program.programId
+    )[0];
+
+    const vaultTokenAccount = getAssociatedTokenAddressSync(
+      usdcMintKp.publicKey,
+      stakeInfo,
+      true
+    );
+
+    const rewardVault = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("reward")],
+      program.programId
+    )[0];
+
+    const mintTx = new anchor.web3.Transaction()
+    const mintToRewardVaultIx = createMintToInstruction(
+      usdcMintKp.publicKey,
+      rewardVault,
+      provider.publicKey,
+      2000 * 10 ** 6,
+      [],
+    )
+    mintTx.add(mintToRewardVaultIx)
+    await provider.sendAndConfirm(mintTx)
+
+    const tx = await program.methods
+      .unstake()
+      .accounts({
+        staker: staker.publicKey,
+        mint: usdcMintKp.publicKey,
+        stakerTokenAccount: stakerTokenAccount,
+        stakeInfo: stakeInfo,
+        vaultTokenAccount: vaultTokenAccount,
+        rewardVault: rewardVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([staker])
+      .rpc();
+
+    console.log("Your transaction signature", tx);
+
+    const stakerAccount = await getAccount(
+      provider.connection,
+      stakerTokenAccount
+    );
+
+    const vaultAccount = await getAccount(
+      provider.connection,
+      vaultTokenAccount
+    );
+
+    const stakeInfoAccount = await program.account.stakeInfo.fetch(stakeInfo);
+
+    console.log({ stakerAccount: stakerAccount.amount });
+
+    console.log({ vaultAccount: vaultAccount.amount });
+
+    console.log({ stakeInfoAccount: stakeInfoAccount.amount });
+  });
 });
